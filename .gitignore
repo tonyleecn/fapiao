@@ -1,0 +1,59 @@
+# Python临时文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller相关文件
+*.manifest
+*.spec
+
+# 发票处理产生的临时文件和日志
+*_text.txt
+failed_fapiao.txt
+fapiao_error.log
+
+# IDE相关文件
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+
+# 操作系统临时文件
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# 个人配置文件(可根据需要添加)
+config.ini
+settings.json
+
+# 发票数据(通常不应纳入版本控制，但根据实际情况调整)
+*.pdf
+/data/
+/examples/
+/samples/
+
+# 确保以下文件不被忽略
+!demo.png 
