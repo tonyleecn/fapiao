@@ -26,7 +26,7 @@
 
 ### 方法一：直接使用可执行文件（推荐）
 
-1. 从[发布页面](https://github.com/yourusername/fapiao/releases)下载最新版本的`发票金额统计工具.zip`
+1. 从[发布页面](https://github.com/tonyleecn/fapiao/releases)下载最新版本的`发票金额统计工具.zip`
 2. 直接双击运行即可使用，无需安装Python环境
 
 ### 方法二：从源代码运行
