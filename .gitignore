@@ -5,7 +5,7 @@ __pycache__/
 *.so
 .Python
 env/
-build/
+build*/
 develop-eggs/
 dist/
 downloads/
@@ -19,6 +19,9 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+fapiao_gui.build
+fapiao_gui.dist
+fapiao_gui.onefile-build
 
 # PyInstaller相关文件
 *.manifest

@@ -1,52 +1,36 @@
 @echo off
+REM 发票金额统计工具打包脚本
+REM 使用Nuitka打包为独立可执行文件（单文件模式）
+
+REM 设置UTF-8代码页
 chcp 65001
-echo 开始构建发票金额统计工具EXE...
+echo.
 
-REM 设置输出的exe文件名 (不需要在此处修改，直接在pyinstaller命令中使用)
+echo 设置代理环境变量...
+set http_proxy=socks5://127.0.0.1:7890
+set https_proxy=socks5://127.0.0.1:7890
 
-REM 如果已存在spec文件，先删除
-if exist "发票金额统计工具.spec" (
-    del "发票金额统计工具.spec"
-    echo 已删除旧的spec文件
-)
-
-REM 如果已存在icon文件，使用现有图标，否则使用默认图标
-set ICON_PARAM=
-if exist "icon.ico" (
-    set ICON_PARAM=--icon=icon.ico
-    echo 使用图标: icon.ico
-) else if exist "fapiao_icon.ico" (
-    set ICON_PARAM=--icon=fapiao_icon.ico
-    echo 使用图标: fapiao_icon.ico
-) else if exist "temp_icon.ico" (
-    set ICON_PARAM=--icon=temp_icon.ico
-    echo 使用图标: temp_icon.ico
-)
-
-REM 检查是否存在taskbar_icon.py文件
-set TASKBAR_DATA=
-if exist "taskbar_icon.py" (
-    set TASKBAR_DATA=--add-data "taskbar_icon.py;."
-    echo 添加任务栏图标模块: taskbar_icon.py
-)
-
-REM 执行PyInstaller命令生成可执行文件
-echo 正在打包...
-pyinstaller --noconfirm --onefile --windowed --clean ^
-    --name "发票金额统计工具" ^
-    %ICON_PARAM% ^
-    --hidden-import pdfplumber.pdf ^
-    --add-data "icon.ico;." ^
-    %TASKBAR_DATA% ^
+echo 开始打包为单文件...
+python.exe -m nuitka --standalone ^
+    --enable-plugin=pyqt5 ^
+    --onefile ^
+    --windows-console-mode=disable ^
+    --windows-icon-from-ico="icon.ico" ^
+    --include-data-files="icon.ico=icon.ico" ^
+    --windows-product-name="发票金额统计工具" ^
+    --windows-file-version=1.0.0 ^
+    --windows-product-version=1.0.0 ^
+    --windows-file-description="发票金额统计工具" ^
+    --assume-yes-for-downloads ^
+    --output-filename="发票金额统计工具.exe" ^
     fapiao_gui.py
 
 echo.
-if exist "dist\发票金额统计工具.exe" (
-    echo 构建成功! 文件位置: dist\发票金额统计工具.exe
+if %ERRORLEVEL% EQU 0 (
+    echo 打包成功！
+    echo 单文件可执行文件应该位于当前目录
 ) else (
-    echo 构建失败，请检查错误信息。
+    echo 打包失败，错误代码: %ERRORLEVEL%
 )
 
-echo.
-echo 按任意键退出...
-pause >nul 
+pause 

@@ -14,6 +14,22 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRect
 from PyQt5.QtGui import QFont, QIcon
 
+# Nuitka打包说明:
+# mingw64下载地址：https://github.com/brechtsanders/winlibs_mingw/releases/
+# 使用以下命令进行打包:
+# python -m nuitka --standalone --enable-plugin=pyqt5 --windows-disable-console --windows-icon-from-ico=icon.ico --include-data-files=icon.ico=icon.ico fapiao_gui.py
+# 
+# 如果需要打包时包含更多资源文件，可以使用:
+# --include-data-files=资源文件路径=目标路径
+#
+# 其他常用选项:
+# --windows-company-name="公司名称"
+# --windows-product-name="发票金额统计工具"
+# --windows-file-version=1.0.0
+# --windows-product-version=1.0.0
+# --windows-file-description="发票金额统计工具"
+# --windows-uac-admin
+
 # 导入任务栏图标设置模块
 try:
     from taskbar_icon import set_taskbar_icon, set_app_icon
