@@ -26,7 +26,7 @@
 
 ### 方法一：直接使用可执行文件（推荐）
 
-1. 从[发布页面](https://github.com/tonyleecn/fapiao/releases)下载最新版本的`发票金额统计工具.zip`
+1. 从[发布页面](https://github.com/tonyleecn/fapiao/releases)下载最新版本`
 2. 直接双击运行即可使用，无需安装Python环境
 
 ### 方法二：从源代码运行
@@ -58,13 +58,53 @@
 
 ## 构建可执行文件
 
-如果您想自己构建可执行文件，项目提供了便捷的批处理脚本：
+### 使用build_exe.bat快速打包（推荐方式）
 
-1. 确保已安装PyInstaller：
+项目提供了便捷的批处理脚本`build_exe.bat`，可以一键打包为单个可执行文件：
+
+1. 确保已安装Nuitka：
+   ```
+   pip install nuitka
+   ```
+
+2. 双击运行`build_exe.bat`脚本，等待打包完成
+   - 脚本会自动使用SOCKS5代理（127.0.0.1:7890）
+   - 自动添加图标和版本信息
+   - 打包为单个EXE文件，便于分发
+
+3. 打包完成后，可执行文件会在当前目录生成
+
+### 脚本内容说明
+
+`build_exe.bat`脚本使用Nuitka将Python代码打包为单个可执行文件，主要功能：
+
+```batch
+@echo off
+REM 设置UTF-8代码页
+chcp 65001
+
+REM 设置代理
+set http_proxy=socks5://127.0.0.1:7890
+set https_proxy=socks5://127.0.0.1:7890
+
+REM 使用Nuitka打包
+python.exe -m nuitka --standalone --onefile --enable-plugin=pyqt5 --windows-console-mode=disable ...
+```
+
+如果需要修改代理设置或其他参数，可以直接编辑此脚本。
+
+### 手动打包方式
+
+如果您想自己构建可执行文件，也可以使用PyInstaller：
+
+1. 安装PyInstaller：
    ```
    pip install pyinstaller
    ```
-2. 运行项目目录中的`build_exe.bat`
+2. 运行以下命令：
+   ```
+   pyinstaller --onefile --windowed --icon=icon.ico --name "发票金额统计工具" fapiao_gui.py
+   ```
 3. 构建完成后，可执行文件位于`dist`目录
 
 ## 常见问题
