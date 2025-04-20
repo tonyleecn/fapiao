@@ -7,17 +7,17 @@ import traceback
 import datetime
 import glob
 from decimal import Decimal
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, 
                              QVBoxLayout, QHBoxLayout, QFileDialog, QWidget, 
                              QTextEdit, QProgressBar, QCheckBox, QMessageBox,
                              QSplitter, QFrame, QGroupBox)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QRect
-from PyQt5.QtGui import QFont, QIcon
+from PySide6.QtCore import Qt, QThread, Signal, QRect
+from PySide6.QtGui import QFont, QIcon
 
 # Nuitka打包说明:
 # mingw64下载地址：https://github.com/brechtsanders/winlibs_mingw/releases/
 # 使用以下命令进行打包:
-# python -m nuitka --standalone --enable-plugin=pyqt5 --windows-disable-console --windows-icon-from-ico=icon.ico --include-data-files=icon.ico=icon.ico fapiao_gui.py
+# python -m nuitka --standalone --enable-plugin=pyside6 --windows-disable-console --windows-icon-from-ico=icon.ico --include-data-files=icon.ico=icon.ico fapiao_gui.py
 # 
 # 如果需要打包时包含更多资源文件，可以使用:
 # --include-data-files=资源文件路径=目标路径
@@ -305,9 +305,9 @@ def extract_invoice_number(pdf_path, text=None):
 
 # 工作线程，用于处理发票
 class WorkerThread(QThread):
-    update_progress = pyqtSignal(int, int)  # 更新进度信号：当前处理数, 总数
-    update_log = pyqtSignal(str)  # 更新日志信号
-    finished_processing = pyqtSignal(dict)  # 处理完成信号，包含结果数据
+    update_progress = Signal(int, int)  # 更新进度信号：当前处理数, 总数
+    update_log = Signal(str)  # 更新日志信号
+    finished_processing = Signal(dict)  # 处理完成信号，包含结果数据
     
     def __init__(self, directory, failed_list_file=None, save_debug_text=False, enable_logging=False):
         super().__init__()
@@ -461,16 +461,13 @@ class FapiaoCounterApp(QMainWindow):
         
     def center_window(self):
         """将窗口居中显示在屏幕上"""
-        # 获取屏幕几何信息
-        screen_geometry = QApplication.desktop().availableGeometry()
-        # 获取窗口几何信息
-        window_geometry = self.frameGeometry()
-        # 计算居中位置
-        center_point = screen_geometry.center()
-        # 将窗口的中心点移动到屏幕的中心点
-        window_geometry.moveCenter(center_point)
-        # 将窗口移动到计算出的位置
-        self.move(window_geometry.topLeft())
+        # 获取屏幕可用区域
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        # 计算窗口居中位置
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+        # 移动窗口
+        self.move(x, y)
         
     def init_ui(self):
         # 设置窗口属性
@@ -587,11 +584,30 @@ class FapiaoCounterApp(QMainWindow):
         self.add_log("程序已启动，请选择包含发票的目录")
     
     def select_directory(self):
+        """打开文件选择对话框，选择发票目录"""
         directory = QFileDialog.getExistingDirectory(self, "选择发票目录")
+        # 在PySide6中，如果用户取消选择，将返回空字符串
         if directory:
             self.dir_path.setText(directory)
-            self.start_button.setEnabled(True)
+            self.log_text.clear()  # 清空日志文本
             self.add_log(f"已选择目录: {directory}")
+            
+            # 检查目录
+            if os.path.exists(directory) and os.path.isdir(directory):
+                # 统计目录中的PDF文件
+                pdf_files = []
+                for root, _, files in os.walk(directory):
+                    pdf_files.extend([os.path.join(root, file) for file in files if file.lower().endswith('.pdf')])
+                
+                if pdf_files:
+                    self.add_log(f"发现 {len(pdf_files)} 个PDF文件")
+                    self.start_button.setEnabled(True)
+                else:
+                    self.add_log("警告: 所选目录中没有找到PDF文件")
+                    self.start_button.setEnabled(False)
+            else:
+                self.add_log("错误: 所选路径不是有效目录")
+                self.start_button.setEnabled(False)
     
     def add_log(self, message):
         self.log_text.append(message)
@@ -708,4 +724,4 @@ if __name__ == "__main__":
     
     window = FapiaoCounterApp()
     window.show()
-    sys.exit(app.exec_()) 
+    sys.exit(app.exec()) 

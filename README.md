@@ -1,6 +1,6 @@
 # 发票金额统计工具
 
-一个用于自动提取PDF发票中金额并汇总的工具。使用PyQt5开发的图形界面应用程序，支持批量处理多个发票文件。
+一个用于自动提取PDF发票中金额并汇总的工具。使用PySide6开发的图形界面应用程序，支持批量处理多个发票文件。
 
 ## 界面预览
 
@@ -19,7 +19,7 @@
 ## 环境要求
 
 - Python 3.6+
-- PyQt5
+- PySide6
 - pdfplumber
 
 ## 安装方法
@@ -88,7 +88,7 @@ set http_proxy=socks5://127.0.0.1:7890
 set https_proxy=socks5://127.0.0.1:7890
 
 REM 使用Nuitka打包
-python.exe -m nuitka --standalone --onefile --enable-plugin=pyqt5 --windows-console-mode=disable ...
+python.exe -m nuitka --standalone --onefile --enable-plugin=pyside6 --windows-console-mode=disable ...
 ```
 
 如果需要修改代理设置或其他参数，可以直接编辑此脚本。
@@ -117,6 +117,12 @@ A: 主要支持中国大陆的增值税专用发票、普通发票等常见PDF�
 
 **Q: 如何解决中文路径问题？**  
 A: 程序已针对中文路径做了处理，如果仍有问题，建议将发票放在不含中文字符的路径下处理。
+
+**Q: Windows任务栏图标不显示或显示为默认图标怎么办？**  
+A: 这是Windows下PySide6的已知问题。您可以尝试以下解决方法：
+   1. 运行项目中的`test_taskbar_icon.py`脚本，它提供了几种修复方法
+   2. 确保项目目录中存在`icon.ico`文件
+   3. 如果使用打包版本，确保使用最新版本的打包脚本生成可执行文件
 
 ## 开源协议
 

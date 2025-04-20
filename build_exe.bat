@@ -12,7 +12,7 @@ set https_proxy=socks5://127.0.0.1:7890
 
 echo 开始打包为单文件...
 python.exe -m nuitka --standalone ^
-    --enable-plugin=pyqt5 ^
+    --enable-plugin=pyside6 ^
     --onefile ^
     --windows-console-mode=disable ^
     --windows-icon-from-ico="icon.ico" ^
