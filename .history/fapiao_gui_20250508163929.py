@@ -130,151 +130,148 @@ def clean_output_files(failed_list_file=None, text_files=False, directory=None):
     
     return cleaned_files
 
-def extract_amount_from_pdf(pdf_path, text=None):
+def extract_amount_from_pdf(pdf_path):
     """从PDF发票中提取金额"""
     try:
         logger.info(f"开始处理文件: {pdf_path}")
-        
-        if text is None:
-            # 如果没有预先提取的文本，则从PDF中提取
-            with pdfplumber.open(pdf_path) as pdf:
-                text = ""
-                try:
-                    for i, page in enumerate(pdf.pages):
-                        logger.debug(f"提取第 {i+1} 页文本")
-                        page_text = page.extract_text()
-                        if page_text:
-                            text += page_text
-                        else:
-                            logger.warning(f"第 {i+1} 页未提取到文本")
-                except Exception as e:
-                    logger.error(f"提取页面文本时出错: {str(e)}")
-                    logger.debug(traceback.format_exc())
-        
-        if not text:
-            logger.warning(f"未能从文件中提取任何文本: {os.path.basename(pdf_path)}")
-            return Decimal('0.00')
-                
-        logger.debug(f"提取的文本长度: {len(text)}")
-        
-        # 记录原始文本以便调试
-        if logger.level <= logging.DEBUG:
-            debug_text_file = f"{os.path.splitext(pdf_path)[0]}_text.txt"
+        with pdfplumber.open(pdf_path) as pdf:
+            text = ""
             try:
-                with open(debug_text_file, 'w', encoding='utf-8') as f:
-                    f.write(text)
-                logger.debug(f"已保存原始文本到: {debug_text_file}")
+                for i, page in enumerate(pdf.pages):
+                    logger.debug(f"提取第 {i+1} 页文本")
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text
+                    else:
+                        logger.warning(f"第 {i+1} 页未提取到文本")
             except Exception as e:
-                logger.debug(f"保存原始文本失败: {str(e)}")
-        
-        # 1. 首先尝试匹配"价税合计"行的金额 - 最通用的模式
-        amount_patterns = [
-            # 标准格式
-            r'价税合计[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
-            r'价税合计.*?小写[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
-            r'价税合计.*?¥\s*([0-9,]+\.[0-9]{2})',
-            r'价税合计.*?￥\s*([0-9,]+\.[0-9]{2})',
-            # 简化格式
-            r'价税合计\s*([0-9,]+\.[0-9]{2})',
-            # 带括号格式
-            r'价税合计.*?\(¥\s*([0-9,]+\.[0-9]{2})\)',
-            r'价税合计.*?\(￥\s*([0-9,]+\.[0-9]{2})\)',
-            # 无空格格式
-            r'价税合计[：:]￥([0-9,]+\.[0-9]{2})',
-            r'价税合计[：:]¥([0-9,]+\.[0-9]{2})'
-        ]
-        
-        for pattern in amount_patterns:
-            logger.debug(f"尝试匹配模式: {pattern}")
-            matches = re.findall(pattern, text)
-            if matches:
-                amount_str = matches[0].replace(',', '')
-                logger.info(f"匹配到价税合计金额: {amount_str}")
-                return Decimal(amount_str)
-        
-        # 2. 尝试匹配表格格式中的数据行
-        table_patterns = [
-            # 尝试匹配可能的表格行，其中含有货物名称、金额等
-            r'(?:合\s*计|小\s*计).*?([0-9,]+\.[0-9]{2}).*?([0-9,]+\.[0-9]{2}).*?([0-9,]+\.[0-9]{2})',
-            # 可能在表格中有税额和税价合计的列
-            r'(?:税价合计|含税合计).*?([0-9,]+\.[0-9]{2})'
-        ]
-        
-        for pattern in table_patterns:
-            logger.debug(f"尝试匹配表格模式: {pattern}")
-            matches = re.findall(pattern, text)
-            if matches:
-                # 如果是元组（多个捕获组），选择最后一个作为税价合计
-                if isinstance(matches[0], tuple):
-                    amount_str = matches[0][-1].replace(',', '')
-                else:
-                    amount_str = matches[0].replace(',', '')
-                logger.info(f"匹配到表格中的金额: {amount_str}")
-                return Decimal(amount_str)
-        
-        # 3. 尝试匹配常见的替代表述
-        fallback_patterns = [
-            # 常见替代表述
-            r'合[计總]金额[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
-            r'小写[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
-            r'（小写）[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
-            # 金额+税额=价税合计的模式
-            r'金额[：:]\s*￥?\s*([0-9,]+\.[0-9]{2}).*?税额[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
-            # 大写金额后面通常会有小写
-            r'人民币[：:]\s*[零壹贰叁肆伍陆柒捌玖拾佰仟万亿元角分整]+\s*[(（]?¥?([0-9,]+\.[0-9]{2})',
-            # 简单模式：尝试匹配发票上任何可能的金额
-            r'[¥￥]\s*([0-9,]+\.[0-9]{2})',
-            # 最后的备选方案：搜索类似金额的内容
-            r'(?<!发票号码|\d)([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})(?!\d)'
-        ]
-        
-        for pattern in fallback_patterns:
-            logger.debug(f"尝试备用匹配模式: {pattern}")
-            matches = re.findall(pattern, text)
-            if matches:
-                # 如果是元组（如金额+税额模式），计算合计
-                if isinstance(matches[0], tuple) and len(matches[0]) >= 2:
-                    try:
-                        amount = Decimal(matches[0][0].replace(',', ''))
-                        tax = Decimal(matches[0][1].replace(',', ''))
-                        total = amount + tax
-                        logger.warning(f"根据金额 {amount} 和税额 {tax} 计算出价税合计: {total}")
-                        return total
-                    except Exception as e:
-                        logger.error(f"计算金额和税额时出错: {str(e)}")
+                logger.error(f"提取页面文本时出错: {str(e)}")
+                logger.debug(traceback.format_exc())
+            
+            if not text:
+                logger.warning(f"未能从文件中提取任何文本: {os.path.basename(pdf_path)}")
+                return Decimal('0.00')
                 
-                # 否则使用第一个匹配项
-                amount_str = matches[0].replace(',', '') if not isinstance(matches[0], tuple) else matches[0][0].replace(',', '')
-                logger.warning(f"在 {os.path.basename(pdf_path)} 中未找到'价税合计'，使用其他匹配项：{amount_str}")
-                return Decimal(amount_str)
-        
-        # 4. 检查是否有包含金额的关键词段落
-        key_sections = [
-            "价税合计", "税价合计", "合计金额", "小写", "大写", "人民币", "RMB", "CHY", "CNY"
-        ]
-        
-        for section in key_sections:
-            # 搜索包含关键词的段落
-            match = re.search(f".{{0,50}}{section}.{{0,100}}", text)
-            if match:
-                section_text = match.group(0)
-                logger.debug(f"找到关键段落: {section_text}")
-                # 在段落中寻找金额格式
-                amount_match = re.search(r'([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})', section_text)
-                if amount_match:
-                    amount_str = amount_match.group(1).replace(',', '')
-                    logger.warning(f"从段落中提取金额: {amount_str}")
+            logger.debug(f"提取的文本长度: {len(text)}")
+            
+            # 记录原始文本以便调试
+            if logger.level <= logging.DEBUG:
+                debug_text_file = f"{os.path.splitext(pdf_path)[0]}_text.txt"
+                try:
+                    with open(debug_text_file, 'w', encoding='utf-8') as f:
+                        f.write(text)
+                    logger.debug(f"已保存原始文本到: {debug_text_file}")
+                except Exception as e:
+                    logger.debug(f"保存原始文本失败: {str(e)}")
+            
+            # 1. 首先尝试匹配"价税合计"行的金额 - 最通用的模式
+            amount_patterns = [
+                # 标准格式
+                r'价税合计[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
+                r'价税合计.*?小写[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
+                r'价税合计.*?¥\s*([0-9,]+\.[0-9]{2})',
+                r'价税合计.*?￥\s*([0-9,]+\.[0-9]{2})',
+                # 简化格式
+                r'价税合计\s*([0-9,]+\.[0-9]{2})',
+                # 带括号格式
+                r'价税合计.*?\(¥\s*([0-9,]+\.[0-9]{2})\)',
+                r'价税合计.*?\(￥\s*([0-9,]+\.[0-9]{2})\)',
+                # 无空格格式
+                r'价税合计[：:]￥([0-9,]+\.[0-9]{2})',
+                r'价税合计[：:]¥([0-9,]+\.[0-9]{2})'
+            ]
+            
+            for pattern in amount_patterns:
+                logger.debug(f"尝试匹配模式: {pattern}")
+                matches = re.findall(pattern, text)
+                if matches:
+                    amount_str = matches[0].replace(',', '')
+                    logger.info(f"匹配到价税合计金额: {amount_str}")
                     return Decimal(amount_str)
-        
-        # 调试：输出部分文本内容以便分析
-        logger.warning(f"无法在 {os.path.basename(pdf_path)} 中找到金额")
-        if len(text) > 200:
-            text_sample = text[:200] + "..." + text[-200:]
-        else:
-            text_sample = text
-        logger.debug(f"文本样本: {text_sample}")
-        
-        return Decimal('0.00')
+            
+            # 2. 尝试匹配表格格式中的数据行
+            table_patterns = [
+                # 尝试匹配可能的表格行，其中含有货物名称、金额等
+                r'(?:合\s*计|小\s*计).*?([0-9,]+\.[0-9]{2}).*?([0-9,]+\.[0-9]{2}).*?([0-9,]+\.[0-9]{2})',
+                # 可能在表格中有税额和税价合计的列
+                r'(?:税价合计|含税合计).*?([0-9,]+\.[0-9]{2})'
+            ]
+            
+            for pattern in table_patterns:
+                logger.debug(f"尝试匹配表格模式: {pattern}")
+                matches = re.findall(pattern, text)
+                if matches:
+                    # 如果是元组（多个捕获组），选择最后一个作为税价合计
+                    if isinstance(matches[0], tuple):
+                        amount_str = matches[0][-1].replace(',', '')
+                    else:
+                        amount_str = matches[0].replace(',', '')
+                    logger.info(f"匹配到表格中的金额: {amount_str}")
+                    return Decimal(amount_str)
+            
+            # 3. 尝试匹配常见的替代表述
+            fallback_patterns = [
+                # 常见替代表述
+                r'合[计總]金额[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
+                r'小写[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
+                r'（小写）[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
+                # 金额+税额=价税合计的模式
+                r'金额[：:]\s*￥?\s*([0-9,]+\.[0-9]{2}).*?税额[：:]\s*￥?\s*([0-9,]+\.[0-9]{2})',
+                # 大写金额后面通常会有小写
+                r'人民币[：:]\s*[零壹贰叁肆伍陆柒捌玖拾佰仟万亿元角分整]+\s*[(（]?¥?([0-9,]+\.[0-9]{2})',
+                # 简单模式：尝试匹配发票上任何可能的金额
+                r'[¥￥]\s*([0-9,]+\.[0-9]{2})',
+                # 最后的备选方案：搜索类似金额的内容
+                r'(?<!发票号码|\d)([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})(?!\d)'
+            ]
+            
+            for pattern in fallback_patterns:
+                logger.debug(f"尝试备用匹配模式: {pattern}")
+                matches = re.findall(pattern, text)
+                if matches:
+                    # 如果是元组（如金额+税额模式），计算合计
+                    if isinstance(matches[0], tuple) and len(matches[0]) >= 2:
+                        try:
+                            amount = Decimal(matches[0][0].replace(',', ''))
+                            tax = Decimal(matches[0][1].replace(',', ''))
+                            total = amount + tax
+                            logger.warning(f"根据金额 {amount} 和税额 {tax} 计算出价税合计: {total}")
+                            return total
+                        except Exception as e:
+                            logger.error(f"计算金额和税额时出错: {str(e)}")
+                    
+                    # 否则使用第一个匹配项
+                    amount_str = matches[0].replace(',', '') if not isinstance(matches[0], tuple) else matches[0][0].replace(',', '')
+                    logger.warning(f"在 {os.path.basename(pdf_path)} 中未找到'价税合计'，使用其他匹配项：{amount_str}")
+                    return Decimal(amount_str)
+            
+            # 4. 检查是否有包含金额的关键词段落
+            key_sections = [
+                "价税合计", "税价合计", "合计金额", "小写", "大写", "人民币", "RMB", "CHY", "CNY"
+            ]
+            
+            for section in key_sections:
+                # 搜索包含关键词的段落
+                match = re.search(f".{{0,50}}{section}.{{0,100}}", text)
+                if match:
+                    section_text = match.group(0)
+                    logger.debug(f"找到关键段落: {section_text}")
+                    # 在段落中寻找金额格式
+                    amount_match = re.search(r'([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})', section_text)
+                    if amount_match:
+                        amount_str = amount_match.group(1).replace(',', '')
+                        logger.warning(f"从段落中提取金额: {amount_str}")
+                        return Decimal(amount_str)
+            
+            # 调试：输出部分文本内容以便分析
+            logger.warning(f"无法在 {os.path.basename(pdf_path)} 中找到金额")
+            if len(text) > 200:
+                text_sample = text[:200] + "..." + text[-200:]
+            else:
+                text_sample = text
+            logger.debug(f"文本样本: {text_sample}")
+            
+            return Decimal('0.00')
     except Exception as e:
         logger.error(f"处理PDF文件 {os.path.basename(pdf_path)} 时出错: {str(e)}")
         logger.debug(traceback.format_exc())
@@ -602,20 +599,8 @@ class WorkerThread(QThread):
                     self.update_progress.emit(index + 1, total_files)
                     self.update_log.emit(f"处理文件 ({index + 1}/{total_files}): {os.path.basename(pdf_path)}")
                     
-                    # 首先提取文本，一次提取所有内容
-                    text = None
-                    try:
-                        with pdfplumber.open(pdf_path) as pdf:
-                            text = ""
-                            for page in pdf.pages:
-                                page_text = page.extract_text()
-                                if page_text:
-                                    text += page_text
-                    except Exception as e:
-                        self.update_log.emit(f"提取文本时出错: {str(e)}")
-                    
                     # 提取发票号码
-                    invoice_number = extract_invoice_number(pdf_path, text)
+                    invoice_number = extract_invoice_number(pdf_path)
                     
                     # 检查发票号码是否重复
                     if invoice_number and invoice_number in processed_invoice_numbers:
@@ -639,43 +624,23 @@ class WorkerThread(QThread):
                         
                         continue  # 跳过后续处理
                     
-                    # 提取金额
-                    amount = extract_amount_from_pdf(pdf_path, text)
-                    
-                    # 只有金额提取成功时才继续处理
+                    amount = extract_amount_from_pdf(pdf_path)
                     if amount > 0:
                         total_amount += amount
                         total_count += 1
-                        
-                        # 提取公司信息
-                        company_info = extract_company_info(pdf_path, text)
-                        
-                        # 完整的发票信息
                         success_info = {
                             'path': pdf_path,
                             'filename': os.path.basename(pdf_path),
                             'amount': amount,
-                            'invoice_number': invoice_number,
-                            'buyer_name': company_info['buyer_name'],
-                            'buyer_tax_id': company_info['buyer_tax_id'],
-                            'seller_name': company_info['seller_name'],
-                            'seller_tax_id': company_info['seller_tax_id']
+                            'invoice_number': invoice_number
                         }
-                        
                         success_list.append(success_info)
                         
                         # 记录成功处理的发票号码
                         if invoice_number:
                             processed_invoice_numbers[invoice_number] = success_info
                             
-                        # 构建日志消息
-                        log_msg = f"成功提取金额: {amount}" + (f", 发票号码: {invoice_number}" if invoice_number else "")
-                        if company_info['buyer_name']:
-                            log_msg += f", 购买方: {company_info['buyer_name']}"
-                        if company_info['seller_name']:
-                            log_msg += f", 销售方: {company_info['seller_name']}"
-                            
-                        self.update_log.emit(log_msg)
+                        self.update_log.emit(f"成功提取金额: {amount}" + (f", 发票号码: {invoice_number}" if invoice_number else ""))
                     else:
                         failed_count += 1
                         failed_list.append(pdf_path)
@@ -716,18 +681,6 @@ class WorkerThread(QThread):
                 except Exception as e:
                     self.update_log.emit(f"保存重复发票列表时出错: {str(e)}")
             
-            # 导出成功处理的发票信息到Excel
-            if success_list:
-                # 构建Excel文件路径
-                timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-                excel_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"发票统计结果_{timestamp}.xlsx")
-                
-                # 导出Excel
-                if export_to_excel(success_list, excel_path):
-                    self.update_log.emit(f"已将处理结果导出到Excel文件: {excel_path}")
-                else:
-                    self.update_log.emit(f"导出Excel文件失败")
-            
             # 发送处理完成信号
             self.finished_processing.emit({
                 'success': True,
@@ -737,8 +690,7 @@ class WorkerThread(QThread):
                 'duplicate_count': duplicate_count,
                 'failed_list': failed_list,
                 'success_list': success_list,
-                'duplicate_list': duplicate_list,
-                'excel_path': excel_path if success_list else None
+                'duplicate_list': duplicate_list
             })
             
         except Exception as e:
@@ -1010,7 +962,6 @@ class FapiaoCounterApp(QMainWindow):
         total_count = result['total_count']
         failed_count = result['failed_count']
         duplicate_count = result['duplicate_count']
-        excel_path = result.get('excel_path', '')
         
         # 格式化金额，加入千位分隔符
         formatted_amount = "{:,.2f}".format(total_amount)
@@ -1037,41 +988,10 @@ class FapiaoCounterApp(QMainWindow):
             log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fapiao_error.log")
             if os.path.exists(log_file) and os.path.getsize(log_file) > 0:
                 results_text += f"\n错误日志已保存到:\n{log_file}"
-        
-        # 添加Excel文件信息
-        if excel_path and os.path.exists(excel_path):
-            results_text += f"\n全部发票信息已导出到Excel文件:\n{excel_path}"
-            
+                
         # 显示结果
         self.results_text.setText(results_text)
         self.add_log(f"处理完成: 共 {total_count} 个发票，总金额 {formatted_amount} 元")
-        
-        # 如果导出了Excel文件，提示用户
-        if excel_path and os.path.exists(excel_path):
-            self.add_log(f"已将发票信息导出到Excel文件: {os.path.basename(excel_path)}")
-            
-            # 询问用户是否打开Excel文件
-            reply = QMessageBox.question(
-                self, 
-                "导出完成", 
-                f"发票数据已成功导出到Excel文件:\n{os.path.basename(excel_path)}\n\n是否立即打开此文件?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-            
-            if reply == QMessageBox.Yes:
-                try:
-                    # 使用系统默认程序打开Excel文件
-                    if sys.platform == 'win32':
-                        os.startfile(excel_path)
-                    elif sys.platform == 'darwin':  # macOS
-                        import subprocess
-                        subprocess.call(['open', excel_path])
-                    else:  # Linux
-                        import subprocess
-                        subprocess.call(['xdg-open', excel_path])
-                except Exception as e:
-                    QMessageBox.warning(self, "打开文件失败", f"无法打开Excel文件: {str(e)}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -60,4 +60,3 @@ settings.json
 
 # 确保以下文件不被忽略
 !demo.png 
-*.xlsx
