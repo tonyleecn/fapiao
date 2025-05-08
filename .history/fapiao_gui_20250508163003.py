@@ -287,39 +287,18 @@ def extract_invoice_number(pdf_path, text=None):
         
         # 常见的发票号码模式
         patterns = [
-            # 标准格式，右上角带"发票号码："的格式
-            r'发票号码[：:]\s*(\d{8,30})',
+            r'发票号码[：:]\s*(\d{8})',
             r'发票号码[：:]\s*(\d{10,12})',
-            # 没有冒号的格式
-            r'发票号码\s*(\d{8,30})',
-            # 英文标记格式
-            r'No[\.:]?\s*(\d{8,30})',
+            r'No[\.:]?\s*(\d{8})',
             r'No[\.:]?\s*(\d{10,12})',
-            # 简化的"号码"格式
-            r'号码[：:]\s*(\d{8,30})',
-            # 尝试匹配特殊格式，如电子发票右上角的号码
-            r'发票号码：\s*(\d{20})',
-            r'发票号码：\s*(\d{10,30})'
+            r'号码[：:]\s*(\d{8,12})'
         ]
         
         for pattern in patterns:
             matches = re.findall(pattern, text)
             if matches:
-                # 找到最长的匹配结果作为发票号码
-                longest_match = max(matches, key=len)
-                logger.info(f"成功提取发票号码: {longest_match}")
-                return longest_match
+                return matches[0]
         
-        # 如果上述模式都没匹配到，尝试提取任何看起来像发票号码的数字序列
-        # 电子发票号码通常很长（如20位）
-        general_number_pattern = r'[\(（]?[发票号码No\.:\s：]*[\)）]?\s*(\d{10,30})\b'
-        matches = re.findall(general_number_pattern, text)
-        if matches:
-            longest_match = max(matches, key=len)
-            logger.warning(f"使用通用模式提取到疑似发票号码: {longest_match}")
-            return longest_match
-            
-        logger.warning(f"未能提取到发票号码")
         return ""
     except Exception as e:
         logger.error(f"提取发票号码时出错: {str(e)}")

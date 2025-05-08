@@ -6,7 +6,6 @@ import logging
 import traceback
 import datetime
 import glob
-import shutil
 from decimal import Decimal
 from PySide6.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel, 
                              QVBoxLayout, QHBoxLayout, QFileDialog, QWidget, 
@@ -287,69 +286,22 @@ def extract_invoice_number(pdf_path, text=None):
         
         # 常见的发票号码模式
         patterns = [
-            # 标准格式，右上角带"发票号码："的格式
-            r'发票号码[：:]\s*(\d{8,30})',
+            r'发票号码[：:]\s*(\d{8})',
             r'发票号码[：:]\s*(\d{10,12})',
-            # 没有冒号的格式
-            r'发票号码\s*(\d{8,30})',
-            # 英文标记格式
-            r'No[\.:]?\s*(\d{8,30})',
+            r'No[\.:]?\s*(\d{8})',
             r'No[\.:]?\s*(\d{10,12})',
-            # 简化的"号码"格式
-            r'号码[：:]\s*(\d{8,30})',
-            # 尝试匹配特殊格式，如电子发票右上角的号码
-            r'发票号码：\s*(\d{20})',
-            r'发票号码：\s*(\d{10,30})'
+            r'号码[：:]\s*(\d{8,12})'
         ]
         
         for pattern in patterns:
             matches = re.findall(pattern, text)
             if matches:
-                # 找到最长的匹配结果作为发票号码
-                longest_match = max(matches, key=len)
-                logger.info(f"成功提取发票号码: {longest_match}")
-                return longest_match
+                return matches[0]
         
-        # 如果上述模式都没匹配到，尝试提取任何看起来像发票号码的数字序列
-        # 电子发票号码通常很长（如20位）
-        general_number_pattern = r'[\(（]?[发票号码No\.:\s：]*[\)）]?\s*(\d{10,30})\b'
-        matches = re.findall(general_number_pattern, text)
-        if matches:
-            longest_match = max(matches, key=len)
-            logger.warning(f"使用通用模式提取到疑似发票号码: {longest_match}")
-            return longest_match
-            
-        logger.warning(f"未能提取到发票号码")
         return ""
     except Exception as e:
         logger.error(f"提取发票号码时出错: {str(e)}")
         return ""
-
-def move_duplicate_invoice(pdf_path, tmp_dir):
-    """将重复的发票文件移动到临时目录"""
-    try:
-        # 确保临时目录存在
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
-            logger.info(f"创建临时目录: {tmp_dir}")
-        
-        # 构建目标路径
-        filename = os.path.basename(pdf_path)
-        target_path = os.path.join(tmp_dir, filename)
-        
-        # 如果目标文件已存在，添加时间戳
-        if os.path.exists(target_path):
-            base_name, ext = os.path.splitext(filename)
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            target_path = os.path.join(tmp_dir, f"{base_name}_{timestamp}{ext}")
-        
-        # 移动文件
-        shutil.move(pdf_path, target_path)
-        logger.info(f"已移动重复发票到: {target_path}")
-        return target_path
-    except Exception as e:
-        logger.error(f"移动重复发票时出错: {str(e)}")
-        return None
 
 # 工作线程，用于处理发票
 class WorkerThread(QThread):
@@ -379,16 +331,8 @@ class WorkerThread(QThread):
             total_amount = Decimal('0.00')
             total_count = 0
             failed_count = 0
-            duplicate_count = 0
             failed_list = []
             success_list = []
-            duplicate_list = []
-            
-            # 存储已处理的发票号码，用于检测重复
-            processed_invoice_numbers = {}
-            
-            # 创建临时目录用于保存重复发票
-            tmp_dir = os.path.join(self.directory, "tmp_duplicates")
             
             # 验证目录是否存在
             if not os.path.exists(self.directory):
@@ -410,10 +354,6 @@ class WorkerThread(QThread):
             # 先统计所有PDF文件
             all_pdf_files = []
             for root, _, files in os.walk(self.directory):
-                # 跳过tmp_duplicates目录
-                if os.path.basename(root) == "tmp_duplicates":
-                    continue
-                    
                 for file in files:
                     if file.lower().endswith('.pdf'):
                         all_pdf_files.append(os.path.join(root, file))
@@ -427,35 +367,11 @@ class WorkerThread(QThread):
                     self.update_progress.emit(index + 1, total_files)
                     self.update_log.emit(f"处理文件 ({index + 1}/{total_files}): {os.path.basename(pdf_path)}")
                     
-                    # 提取发票号码
-                    invoice_number = extract_invoice_number(pdf_path)
-                    
-                    # 检查发票号码是否重复
-                    if invoice_number and invoice_number in processed_invoice_numbers:
-                        # 发现重复发票
-                        duplicate_count += 1
-                        duplicate_info = {
-                            'path': pdf_path,
-                            'filename': os.path.basename(pdf_path),
-                            'invoice_number': invoice_number,
-                            'original_path': processed_invoice_numbers[invoice_number]['path']
-                        }
-                        duplicate_list.append(duplicate_info)
-                        
-                        # 将重复发票移动到临时目录
-                        moved_path = move_duplicate_invoice(pdf_path, tmp_dir)
-                        if moved_path:
-                            duplicate_info['moved_to'] = moved_path
-                            self.update_log.emit(f"发现重复发票号码: {invoice_number}，已移动到: {moved_path}")
-                        else:
-                            self.update_log.emit(f"发现重复发票号码: {invoice_number}，但移动失败")
-                        
-                        continue  # 跳过后续处理
-                    
                     amount = extract_amount_from_pdf(pdf_path)
                     if amount > 0:
                         total_amount += amount
                         total_count += 1
+                        invoice_number = extract_invoice_number(pdf_path)
                         success_info = {
                             'path': pdf_path,
                             'filename': os.path.basename(pdf_path),
@@ -463,12 +379,7 @@ class WorkerThread(QThread):
                             'invoice_number': invoice_number
                         }
                         success_list.append(success_info)
-                        
-                        # 记录成功处理的发票号码
-                        if invoice_number:
-                            processed_invoice_numbers[invoice_number] = success_info
-                            
-                        self.update_log.emit(f"成功提取金额: {amount}" + (f", 发票号码: {invoice_number}" if invoice_number else ""))
+                        self.update_log.emit(f"成功提取金额: {amount}")
                     else:
                         failed_count += 1
                         failed_list.append(pdf_path)
@@ -490,35 +401,14 @@ class WorkerThread(QThread):
                 except Exception as e:
                     self.update_log.emit(f"保存匹配失败列表时出错: {str(e)}")
             
-            # 如果有重复的发票，也保存到文件
-            if duplicate_list:
-                duplicate_list_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "duplicate_fapiao.txt")
-                try:
-                    with open(duplicate_list_file, 'w', encoding='utf-8') as f:
-                        f.write(f"# 重复发票列表 - 生成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                        f.write(f"# 总计: {len(duplicate_list)} 个重复发票\n")
-                        f.write(f"# 重复发票已移动到: {tmp_dir}\n\n")
-                        for info in duplicate_list:
-                            f.write(f"发票号码: {info['invoice_number']}\n")
-                            f.write(f"文件路径: {info['path']}\n")
-                            f.write(f"与此文件重复: {info['original_path']}\n")
-                            if 'moved_to' in info:
-                                f.write(f"已移动到: {info['moved_to']}\n")
-                            f.write("-" * 50 + "\n")
-                    self.update_log.emit(f"已将 {len(duplicate_list)} 个重复发票信息保存到文件: {duplicate_list_file}")
-                except Exception as e:
-                    self.update_log.emit(f"保存重复发票列表时出错: {str(e)}")
-            
             # 发送处理完成信号
             self.finished_processing.emit({
                 'success': True,
                 'total_amount': total_amount,
                 'total_count': total_count,
                 'failed_count': failed_count,
-                'duplicate_count': duplicate_count,
                 'failed_list': failed_list,
-                'success_list': success_list,
-                'duplicate_list': duplicate_list
+                'success_list': success_list
             })
             
         except Exception as e:
@@ -789,7 +679,6 @@ class FapiaoCounterApp(QMainWindow):
         total_amount = result['total_amount']
         total_count = result['total_count']
         failed_count = result['failed_count']
-        duplicate_count = result['duplicate_count']
         
         # 格式化金额，加入千位分隔符
         formatted_amount = "{:,.2f}".format(total_amount)
@@ -797,19 +686,15 @@ class FapiaoCounterApp(QMainWindow):
         results_text = f"""
 统计结果:
 -------------------------------
-发票总数: {total_count + failed_count + duplicate_count} 个
+发票总数: {total_count + failed_count} 个
 成功识别: {total_count} 个
 识别失败: {failed_count} 个
-重复发票: {duplicate_count} 个
 总金额: {formatted_amount} 元
 -------------------------------
 """
         if failed_count > 0:
             failed_list_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "failed_fapiao.txt")
             results_text += f"\n注意: 有 {failed_count} 个发票无法识别金额，详情请查看:\n{failed_list_file}"
-        
-        if duplicate_count > 0:
-            results_text += f"\n注意: 有 {duplicate_count} 个重复发票，详情请查看:\n{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'duplicate_fapiao.txt')}"
         
         # 添加日志文件信息
         if self.enable_logging_checkbox.isChecked():
